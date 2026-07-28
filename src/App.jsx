@@ -11,7 +11,7 @@ import { supabase, phoneToTechnicalEmail, normalizePhone } from './supabaseClien
 /* ---------------------------------------------------------------------- */
 
 const PALETTE = ['#2F6FED', '#FF6B4A', '#1FAE7A', '#F0A93A', '#8B5CF6', '#EC4899'];
-const REACTIONS = ['ðŸ‘', 'ðŸ”¥', 'ðŸ˜‚', 'ðŸ†'];
+const REACTIONS = ['👏', '🔥', '😂', '🏆'];
 const RESERVED_NICKNAMES = ['giulia_99', 'marco_re', 'sara_official', 'admin'];
 const POINT_OPTIONS = [-30, -15, -10, -5, 5, 10, 15, 30];
 
@@ -19,8 +19,8 @@ const FORMATS = [
   {
     id: 'vacanza',
     name: 'Vacanza Soft',
-    emoji: 'ðŸ–ï¸',
-    tagline: 'Ritmo lento, missioni diffuse su piÃ¹ giorni',
+    emoji: '🏖️',
+    tagline: 'Ritmo lento, missioni diffuse su più giorni',
     missions: [
       { id: 'v1', title: 'Prepara la colazione per tutti', points: 10, repeatable: true, cooldownSec: 20, requiresConsent: false },
       { id: 'v2', title: 'Porta il gruppo in un posto non turistico', points: 15, repeatable: false, requiresConsent: false },
@@ -31,7 +31,7 @@ const FORMATS = [
   {
     id: 'nightout',
     name: 'Night Out',
-    emoji: 'ðŸŒƒ',
+    emoji: '🌃',
     tagline: 'Missioni rapide, pensate per una serata sola',
     missions: [
       { id: 'n1', title: 'Fai ridere il gruppo con una storia vera in 1 minuto', points: 8, repeatable: true, cooldownSec: 15, requiresConsent: false },
@@ -43,8 +43,8 @@ const FORMATS = [
   {
     id: 'festival',
     name: 'Festival Crew',
-    emoji: 'ðŸŽ§',
-    tagline: 'Esplorazione e resistenza del gruppo su piÃ¹ giorni',
+    emoji: '🎧',
+    tagline: 'Esplorazione e resistenza del gruppo su più giorni',
     missions: [
       { id: 'f1', title: 'Ritrova il gruppo al punto B in meno di 15 minuti', points: 15, repeatable: false, requiresConsent: false },
       { id: 'f2', title: 'Scopri un artista sconosciuto e convinci un amico ad ascoltarlo', points: 10, repeatable: false, requiresConsent: true },
@@ -55,7 +55,7 @@ const FORMATS = [
   {
     id: 'custom',
     name: 'Custom',
-    emoji: 'ðŸ§©',
+    emoji: '🧩',
     tagline: 'Nessuna missione preimpostata: create voi le regole del gioco',
     missions: [],
   },
@@ -66,7 +66,7 @@ const FORMATS = [
 // reali dell'account tramite l'effetto di sincronizzazione dentro App().
 // Resta un oggetto mutabile a livello di modulo (invece di uno stato React)
 // per evitare di dover passare "chi sono io" come prop in ogni schermata:
-// Ã¨ una scelta pragmatica per questa fase, non la piÃ¹ elegante possibile.
+// è una scelta pragmatica per questa fase, non la più elegante possibile.
 let ME = { id: null, name: 'Tu', color: '#2F6FED' };
 
 /* ---------------------------------------------------------------------- */
@@ -94,7 +94,7 @@ function allMissionsFor(circle) {
 
 // A differenza di allMissionsFor (solo missioni attive), questa cerca anche tra
 // quelle rimosse/disabilitate: serve per mostrare correttamente i titoli nello
-// storico/recap anche dopo che una missione Ã¨ stata eliminata dal creatore.
+// storico/recap anche dopo che una missione è stata eliminata dal creatore.
 function findMissionById(circle, missionId) {
   const base = formatFor(circle.formatId)?.missions || [];
   const custom = circle.customMissions || [];
@@ -209,7 +209,7 @@ export default function App() {
 
   const openCircle = circles.find((c) => c.id === openCircleId) || null;
 
-  /* --- ripristina la sessione Supabase esistente (utente giÃ  loggato) --- */
+  /* --- ripristina la sessione Supabase esistente (utente già loggato) --- */
   useEffect(() => {
     let active = true;
 
@@ -364,9 +364,9 @@ export default function App() {
     setJoinPreview(null);
   }
 
-  // "Indietro" torna di UN passo, senza perdere quello che hai giÃ  inserito
-  // (prima il tasto Indietro resettava sempre tutto il flusso: era il bug piÃ¹
-  // fastidioso da testare â€” scrivevi il nome, sbagliavi format, e perdevi il nome).
+  // "Indietro" torna di UN passo, senza perdere quello che hai già inserito
+  // (prima il tasto Indietro resettava sempre tutto il flusso: era il bug più
+  // fastidioso da testare — scrivevi il nome, sbagliavi format, e perdevi il nome).
   function goBackStep() {
     if (plusStep === 'format') {
       setPlusStep('name');
@@ -385,7 +385,7 @@ export default function App() {
       p_format_id: newCircleFormatId,
     });
     if (error) {
-      showToast(`Non Ã¨ stato possibile creare la Cerchia: ${error.message}`);
+      showToast(`Non è stato possibile creare la Cerchia: ${error.message}`);
       return;
     }
     setDraftCircle({
@@ -408,14 +408,14 @@ export default function App() {
     setActiveTab('gruppi');
     setOpenCircleId(draftCircle.id);
     setCircleSubTab('missioni');
-    showToast('Cerchia creata! Si parte ðŸŽ‰');
+    showToast('Cerchia creata! Si parte 🎉');
   }
 
   async function handleVerifyJoinCode() {
     const code = joinCodeInput.trim().toUpperCase();
     if (!code) return;
     if (circles.some((c) => c.code === code)) {
-      setJoinError('Fai giÃ  parte di questa Cerchia.');
+      setJoinError('Fai già parte di questa Cerchia.');
       setJoinPreview(null);
       return;
     }
@@ -440,7 +440,7 @@ export default function App() {
     const code = joinCodeInput.trim().toUpperCase();
     const { error } = await supabase.rpc('join_circle_by_code', { p_code: code });
     if (error) {
-      setJoinError(`Non Ã¨ stato possibile unirsi: ${error.message}`);
+      setJoinError(`Non è stato possibile unirsi: ${error.message}`);
       return;
     }
     await loadCircles();
@@ -549,7 +549,7 @@ export default function App() {
     setProposePoints(null);
     setProposeOpen(false);
     showToast(`Missione proposta (${signed(points)} punti): in revisione prima di essere attivabile.`);
-    // Il timer Ã¨ legato all'id della missione, non alla schermata aperta:
+    // Il timer è legato all'id della missione, non alla schermata aperta:
     // viene approvata anche se nel frattempo navighi altrove.
     setTimeout(() => {
       updateCircle(circle.id, (c) => ({
@@ -564,7 +564,7 @@ export default function App() {
   function handleDeleteMission(circle, mission) {
     setConfirmModal({
       title: 'Rimuovere questa missione?',
-      body: `"${mission.title}" non sarÃ  piÃ¹ disponibile per nessun membro della Cerchia.`,
+      body: `"${mission.title}" non sarà più disponibile per nessun membro della Cerchia.`,
       confirmLabel: 'Rimuovi missione',
       danger: true,
       onConfirm: () => {
@@ -591,14 +591,14 @@ export default function App() {
       : '';
     setConfirmModal({
       title: 'Uscire dalla Cerchia?',
-      body: `Non farai piÃ¹ parte di "${circle.name}". Potrai rientrare solo con un nuovo invito.${ownerNote}`,
+      body: `Non farai più parte di "${circle.name}". Potrai rientrare solo con un nuovo invito.${ownerNote}`,
       confirmLabel: 'Esci dalla Cerchia',
       danger: true,
       onConfirm: async () => {
         const { error } = await supabase.rpc('leave_circle', { p_circle_id: circle.id });
         setConfirmModal(null);
         if (error) {
-          showToast(`Non Ã¨ stato possibile uscire dalla Cerchia: ${error.message}`);
+          showToast(`Non è stato possibile uscire dalla Cerchia: ${error.message}`);
           return;
         }
         await loadCircles();
@@ -610,13 +610,13 @@ export default function App() {
 
   function handleReportMission() {
     setReportMission(null);
-    showToast('Segnalazione inviata: verrÃ  revisionata dal team.');
+    showToast('Segnalazione inviata: verrà revisionata dal team.');
   }
 
   function handleCloseSession(circle) {
     setConfirmModal({
       title: 'Chiudere la sessione?',
-      body: 'VerrÃ  generato il recap finale. Non sarÃ  piÃ¹ possibile completare nuove missioni.',
+      body: 'Verrà generato il recap finale. Non sarà più possibile completare nuove missioni.',
       confirmLabel: 'Chiudi e genera recap',
       onConfirm: () => {
         updateCircle(circle.id, (c) => ({ ...c, status: 'closed' }));
@@ -629,7 +629,7 @@ export default function App() {
   function handleRemoveMember(circle, memberId) {
     setConfirmModal({
       title: 'Rimuovere il membro?',
-      body: 'VerrÃ  escluso dalla Cerchia. I punti giÃ  assegnati restano nello storico.',
+      body: 'Verrà escluso dalla Cerchia. I punti già assegnati restano nello storico.',
       confirmLabel: 'Rimuovi',
       onConfirm: () => {
         updateCircle(circle.id, (c) => ({ ...c, members: c.members.filter((m) => m.id !== memberId) }));
@@ -686,19 +686,19 @@ export default function App() {
         });
         if (error) {
           if (error.message.toLowerCase().includes('already registered')) {
-            setAuthError('Questo numero di telefono ha giÃ  un account: prova ad accedere.');
+            setAuthError('Questo numero di telefono ha già un account: prova ad accedere.');
           } else {
-            setAuthError(`Non Ã¨ stato possibile creare l'account: ${error.message}`);
+            setAuthError(`Non è stato possibile creare l'account: ${error.message}`);
           }
           return;
         }
         if (data.session) {
           setUser((u) => ({ ...u, id: data.user.id, phone, phoneVerified: false }));
           setIsAuthenticated(true);
-          showToast('Account creato! Benvenuto su Cerchia ðŸŽ‰');
+          showToast('Account creato! Benvenuto su Cerchia 🎉');
         } else {
           // Progetto configurato con conferma email obbligatoria: va disattivata
-          // (vedi README) perchÃ© qui usiamo una email tecnica, non reale.
+          // (vedi README) perché qui usiamo una email tecnica, non reale.
           setAuthError('Account creato ma serve disattivare la conferma email nelle impostazioni Supabase (vedi README).');
         }
       } else {
@@ -712,7 +712,7 @@ export default function App() {
         }
         setUser((u) => ({ ...u, id: data.user.id, phone }));
         setIsAuthenticated(true);
-        showToast('Bentornato su Cerchia ðŸ‘‹');
+        showToast('Bentornato su Cerchia 👋');
       }
       setAuthPassword('');
       setAuthConfirmPassword('');
@@ -729,15 +729,15 @@ export default function App() {
 
   function handleSaveAccount() {
     if (nicknameTaken) {
-      showToast('Correggi il nickname prima di salvare: giÃ  in uso.');
+      showToast('Correggi il nickname prima di salvare: già in uso.');
       return;
     }
     setUser((u) => ({ ...u, nickname: nicknameDraft.trim() }));
-    showToast('Modifiche salvate âœ…');
+    showToast('Modifiche salvate ✅');
   }
 
   function handlePasswordRecovery() {
-    showToast('Codice OTP inviato via SMS al numero verificato ðŸ“±');
+    showToast('Codice OTP inviato via SMS al numero verificato 📱');
   }
 
   function handleChangePassword() {
@@ -750,18 +750,18 @@ export default function App() {
       return;
     }
     setPwFields({ current: '', next: '', confirm: '' });
-    showToast('Password aggiornata âœ…');
+    showToast('Password aggiornata ✅');
   }
 
   function handleDeleteAccount() {
     setConfirmModal({
       title: 'Eliminare l\u2019account?',
-      body: 'Questa azione Ã¨ definitiva e rimuoverÃ  i tuoi dati da tutte le Cerchie.',
+      body: 'Questa azione è definitiva e rimuoverà i tuoi dati da tutte le Cerchie.',
       confirmLabel: 'Elimina account',
       danger: true,
       onConfirm: () => {
         setConfirmModal(null);
-        showToast('Account eliminato (demo) â€” nessuna modifica reale.');
+        showToast('Account eliminato (demo) — nessuna modifica reale.');
       },
     });
   }
@@ -798,7 +798,7 @@ export default function App() {
         {!sessionChecked ? (
           <div className="app-shell">
             <div className="screen auth-screen">
-              <p className="screen-sub" style={{ textAlign: 'center' }}>Verifica sessioneâ€¦</p>
+              <p className="screen-sub" style={{ textAlign: 'center' }}>Verifica sessione…</p>
             </div>
           </div>
         ) : !isAuthenticated ? (
@@ -1036,11 +1036,11 @@ function AuthScreen(props) {
       {error && <p className="field-error">{error}</p>}
 
       <button className="btn btn-primary btn-block" onClick={onSubmit} disabled={busy}>
-        {busy ? 'Attendereâ€¦' : mode === 'signup' ? 'Crea account' : 'Accedi'}
+        {busy ? 'Attendere…' : mode === 'signup' ? 'Crea account' : 'Accedi'}
       </button>
 
       <p className="auth-switch-hint">
-        {mode === 'signup' ? 'Hai giÃ  un account? ' : 'Non hai ancora un account? '}
+        {mode === 'signup' ? 'Hai già un account? ' : 'Non hai ancora un account? '}
         <button
           type="button"
           className="link-btn auth-inline-link"
@@ -1077,7 +1077,7 @@ function GruppiScreen({ circles, circlesLoaded, onOpen, onLeave }) {
       </div>
 
       {!circlesLoaded ? (
-        <p className="screen-sub">Caricamento delle tue Cerchieâ€¦</p>
+        <p className="screen-sub">Caricamento delle tue Cerchie…</p>
       ) : circles.length === 0 ? (
         <div className="empty-state">
           <svg width="88" height="88" viewBox="0 0 88 88" fill="none">
@@ -1110,7 +1110,7 @@ function GruppiScreen({ circles, circlesLoaded, onOpen, onLeave }) {
                 <div className="circle-card-info">
                   <div className="circle-card-name">{c.name}</div>
                   <div className="circle-card-meta">
-                    {fmt?.name} Â· {c.members.length} membri
+                    {fmt?.name} · {c.members.length} membri
                   </div>
                 </div>
                 <div className="circle-card-right">
@@ -1159,19 +1159,19 @@ function PlusScreen(props) {
 
       {step === 'menu' && (
         <>
-          <h1 className="screen-title">Nuova avventura o ti unisci a una giÃ  iniziata?</h1>
+          <h1 className="screen-title">Nuova avventura o ti unisci a una già iniziata?</h1>
           <button className="big-choice-card" onClick={() => setStep('name')}>
-            <div className="big-choice-emoji">âœ¨</div>
+            <div className="big-choice-emoji">✨</div>
             <div>
               <div className="big-choice-title">Crea una nuova Cerchia</div>
               <div className="big-choice-sub">Scegli nome, format e invita gli amici</div>
             </div>
           </button>
           <button className="big-choice-card" onClick={() => setStep('join')}>
-            <div className="big-choice-emoji">ðŸ”—</div>
+            <div className="big-choice-emoji">🔗</div>
             <div>
               <div className="big-choice-title">Entra con un codice o link</div>
-              <div className="big-choice-sub">Qualcuno ti ha giÃ  invitato</div>
+              <div className="big-choice-sub">Qualcuno ti ha già invitato</div>
             </div>
           </button>
         </>
@@ -1219,7 +1219,7 @@ function PlusScreen(props) {
       {step === 'invite' && draftCircle && (
         <>
           <h1 className="screen-title">Manda il codice al gruppo</h1>
-          <p className="screen-sub">La Cerchia Ã¨ giÃ  attiva: condividi il codice, chi lo usa compare qui in tempo reale.</p>
+          <p className="screen-sub">La Cerchia è già attiva: condividi il codice, chi lo usa compare qui in tempo reale.</p>
           <div className="invite-code-box">
             <div className="invite-code">{draftCircle.code}</div>
             <button
@@ -1266,7 +1266,7 @@ function PlusScreen(props) {
             <div className="join-preview-card">
               <div className="join-preview-title">{joinPreview.name}</div>
               <div className="join-preview-sub">
-                {formatFor(joinPreview.formatId)?.emoji} {formatFor(joinPreview.formatId)?.name} Â· {joinPreview.memberCount} membri
+                {formatFor(joinPreview.formatId)?.emoji} {formatFor(joinPreview.formatId)?.name} · {joinPreview.memberCount} membri
               </div>
               <button className="btn btn-primary btn-block" onClick={onConfirmJoin}>
                 Unisciti alla Cerchia
@@ -1314,7 +1314,7 @@ function AccountScreen({
       <div className="field-group">
         <label className="field-label">Nickname (univoco in tutta l'app)</label>
         <input className="text-input" value={nicknameDraft} onChange={(e) => setNicknameDraft(e.target.value)} />
-        {nicknameTaken && <p className="field-error">Nickname giÃ  in uso da un altro utente.</p>}
+        {nicknameTaken && <p className="field-error">Nickname già in uso da un altro utente.</p>}
       </div>
 
       <div className="field-group">
@@ -1410,12 +1410,12 @@ function CircleDetail(props) {
                 <div className="mission-tags">
                   {m.repeatable && <Chip tone="amber">Ripetibile</Chip>}
                   {m.requiresConsent && <Chip tone="muted">Richiede consenso</Chip>}
-                  {m.points < 0 && <Chip tone="coral">PenalitÃ </Chip>}
-                  {m.custom && <Chip tone={pending ? 'amber' : 'mint'}>{pending ? 'In revisione' : 'Custom Â· approvata'}</Chip>}
+                  {m.points < 0 && <Chip tone="coral">Penalità</Chip>}
+                  {m.custom && <Chip tone={pending ? 'amber' : 'mint'}>{pending ? 'In revisione' : 'Custom · approvata'}</Chip>}
                 </div>
                 <div className="mission-actions">
                   <button className="btn btn-primary" disabled={disabled} onClick={() => onComplete(circle, m)}>
-                    {onCd ? `Disponibile tra ${cooldownRemaining(circle.id, m.id)}s` : done ? 'GiÃ  completata da te' : pending ? 'In revisione' : 'Segna completata'}
+                    {onCd ? `Disponibile tra ${cooldownRemaining(circle.id, m.id)}s` : done ? 'Già completata da te' : pending ? 'In revisione' : 'Segna completata'}
                   </button>
                   <button className="icon-btn" title="Segnala missione" onClick={() => onReportMission(m)}>
                     <Flag size={16} />
@@ -1476,7 +1476,7 @@ function CircleDetail(props) {
 function ClassificaTab({ circle, isOwner, onCloseSession, onReact }) {
   const scores = scoresFor(circle);
   const recentEntries = [...circle.scoreEntries].sort((a, b) => b.ts - a.ts).slice(0, 6);
-  const medals = ['ðŸ¥‡', 'ðŸ¥ˆ', 'ðŸ¥‰'];
+  const medals = ['🥇', '🥈', '🥉'];
 
   const missionCounts = {};
   circle.scoreEntries.forEach((e) => { missionCounts[e.missionId] = (missionCounts[e.missionId] || 0) + 1; });
@@ -1491,7 +1491,7 @@ function ClassificaTab({ circle, isOwner, onCloseSession, onReact }) {
     <div className="sub-screen">
       {circle.status === 'closed' && (
         <div className="recap-banner">
-          <Sparkles size={16} /> Sessione chiusa â€” ecco il recap
+          <Sparkles size={16} /> Sessione chiusa — ecco il recap
         </div>
       )}
 
@@ -1508,8 +1508,8 @@ function ClassificaTab({ circle, isOwner, onCloseSession, onReact }) {
 
       {circle.status === 'closed' && (
         <div className="recap-highlights">
-          {topMission && <div className="recap-card">ðŸ† Missione piÃ¹ popolare<br /><b>{topMission.title}</b></div>}
-          {mostActive && <div className="recap-card">âš¡ Membro piÃ¹ attivo<br /><b>{mostActive.name}</b></div>}
+          {topMission && <div className="recap-card">🏆 Missione più popolare<br /><b>{topMission.title}</b></div>}
+          {mostActive && <div className="recap-card">⚡ Membro più attivo<br /><b>{mostActive.name}</b></div>}
         </div>
       )}
 
@@ -1519,7 +1519,7 @@ function ClassificaTab({ circle, isOwner, onCloseSession, onReact }) {
         </button>
       )}
 
-      <h2 className="section-title">AttivitÃ  recente</h2>
+      <h2 className="section-title">Attività recente</h2>
       <div className="activity-feed">
         {recentEntries.map((e) => {
           const m = circle.members.find((mm) => mm.id === e.userId);
@@ -1533,7 +1533,7 @@ function ClassificaTab({ circle, isOwner, onCloseSession, onReact }) {
                 ) : (
                   <span><b>{m?.name}</b> ha completato "{mission?.title}"</span>
                 )}
-                <div className="activity-meta">{relativeTime(e.ts)} Â· {signed(e.points)} punti</div>
+                <div className="activity-meta">{relativeTime(e.ts)} · {signed(e.points)} punti</div>
               </div>
               {!e.hidden && (
                 <div className="reaction-row">
@@ -1576,7 +1576,7 @@ function ImpostazioniTab({ circle, fmt, isOwner, onRemoveMember, onLeave, showTo
         {circle.members.map((m) => (
           <div key={m.id} className="member-join-row">
             <AvatarCircle name={m.name} color={m.color} size={34} />
-            <span>{m.name}{m.id === circle.ownerId ? ' Â· owner' : ''}{m.id === ME.id ? ' (tu)' : ''}</span>
+            <span>{m.name}{m.id === circle.ownerId ? ' · owner' : ''}{m.id === ME.id ? ' (tu)' : ''}</span>
             {isOwner && m.id !== ME.id && (
               <button className="icon-btn danger" style={{ marginLeft: 'auto' }} onClick={() => onRemoveMember(circle, m.id)}>
                 <Trash2 size={15} />
@@ -1587,8 +1587,8 @@ function ImpostazioniTab({ circle, fmt, isOwner, onRemoveMember, onLeave, showTo
       </div>
 
       <div className="policy-note">
-        Cerchia Ã¨ un gioco sociale pensato per il divertimento responsabile. Non promuove nÃ© incentiva l'abuso di alcol.
-        Tutte le attivitÃ  che coinvolgono altre persone richiedono consenso esplicito. Le missioni devono sempre essere sicure, legali e rispettose.
+        Cerchia è un gioco sociale pensato per il divertimento responsabile. Non promuove né incentiva l'abuso di alcol.
+        Tutte le attività che coinvolgono altre persone richiedono consenso esplicito. Le missioni devono sempre essere sicure, legali e rispettose.
       </div>
 
       <button className="btn btn-danger btn-block" onClick={() => onLeave(circle)}>
@@ -1665,7 +1665,7 @@ function ConsentModal({ data, setData, onConfirm, onCancel }) {
 
         <label className="silent-toggle">
           <input type="checkbox" checked={silent} onChange={(e) => setData((d) => ({ ...d, silent: e.target.checked }))} />
-          {silent ? <EyeOff size={15} /> : <Eye size={15} />} Non mostrare in classifica (modalitÃ  silenziosa)
+          {silent ? <EyeOff size={15} /> : <Eye size={15} />} Non mostrare in classifica (modalità silenziosa)
         </label>
 
         <button className="btn btn-primary btn-block" disabled={!allResolved} onClick={() => onConfirm(silent)}>
@@ -1698,7 +1698,7 @@ function ReportDialog({ mission, onCancel, onConfirm }) {
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="modal modal-small">
         <div className="modal-title">Segnala "{mission.title}"</div>
-        <p className="modal-hint">La segnalazione verrÃ  revisionata dal team di moderazione.</p>
+        <p className="modal-hint">La segnalazione verrà revisionata dal team di moderazione.</p>
         <div className="modal-row-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Annulla</button>
           <button className="btn btn-danger" onClick={onConfirm}>Invia segnalazione</button>
