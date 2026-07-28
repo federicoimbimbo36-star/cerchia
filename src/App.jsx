@@ -61,50 +61,13 @@ const FORMATS = [
   },
 ];
 
-const ME = { id: 'u1', name: 'Tu', color: '#2F6FED' };
-
-const DEMO_CIRCLE = {
-  id: 'c1',
-  name: 'Weekend a Riccione',
-  formatId: 'vacanza',
-  status: 'active',
-  code: 'RIC482',
-  ownerId: 'u1',
-  members: [
-    ME,
-    { id: 'u2', name: 'Giulia', color: '#FF6B4A' },
-    { id: 'u3', name: 'Marco', color: '#1FAE7A' },
-    { id: 'u4', name: 'Sara', color: '#F0A93A' },
-  ],
-  customMissions: [],
-  disabledMissionIds: [],
-  scoreEntries: [
-    { id: 'e1', missionId: 'v1', userId: 'u2', points: 10, hidden: false, reactions: { 'ðŸ‘': 2 }, ts: Date.now() - 1000 * 60 * 60 * 30 },
-    { id: 'e2', missionId: 'v2', userId: 'u2', points: 15, hidden: false, reactions: { 'ðŸ”¥': 1 }, ts: Date.now() - 1000 * 60 * 60 * 26 },
-    { id: 'e3', missionId: 'v3', userId: 'u3', points: 12, hidden: false, reactions: {}, ts: Date.now() - 1000 * 60 * 60 * 20 },
-    { id: 'e4', missionId: 'v4', userId: 'u3', points: 12, hidden: true, reactions: {}, ts: Date.now() - 1000 * 60 * 60 * 15 },
-    { id: 'e5', missionId: 'v4', userId: 'u4', points: 12, hidden: false, reactions: { 'ðŸ˜‚': 1 }, ts: Date.now() - 1000 * 60 * 60 * 10 },
-    { id: 'e6', missionId: 'v1', userId: 'u1', points: 10, hidden: false, reactions: {}, ts: Date.now() - 1000 * 60 * 60 * 4 },
-  ],
-};
-
-const JOIN_CIRCLE_TEMPLATE = {
-  id: 'c2',
-  name: 'Trip Squad',
-  formatId: 'festival',
-  status: 'active',
-  code: 'FEST24',
-  ownerId: 'u5',
-  members: [
-    { id: 'u5', name: 'Alessandro', color: '#8B5CF6' },
-    { id: 'u6', name: 'Chiara', color: '#EC4899' },
-  ],
-  customMissions: [],
-  disabledMissionIds: [],
-  scoreEntries: [
-    { id: 'j1', missionId: 'f3', userId: 'u5', points: 8, hidden: false, reactions: {}, ts: Date.now() - 1000 * 60 * 60 * 5 },
-  ],
-};
+// "ME" rappresenta l'utente che sta usando l'app in questo momento.
+// Prima era fisso (demo); ora, dopo il login, viene aggiornato con i dati
+// reali dell'account tramite l'effetto di sincronizzazione dentro App().
+// Resta un oggetto mutabile a livello di modulo (invece di uno stato React)
+// per evitare di dover passare "chi sono io" come prop in ogni schermata:
+// Ã¨ una scelta pragmatica per questa fase, non la piÃ¹ elegante possibile.
+let ME = { id: null, name: 'Tu', color: '#2F6FED' };
 
 /* ---------------------------------------------------------------------- */
 /* HELPER                                                                  */
@@ -204,7 +167,8 @@ export default function App() {
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [showAuthConfirmPassword, setShowAuthConfirmPassword] = useState(false);
 
-  const [circles, setCircles] = useState([DEMO_CIRCLE]);
+  const [circles, setCircles] = useState([]);
+  const [circlesLoaded, setCirclesLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState('gruppi');
   const [openCircleId, setOpenCircleId] = useState(null);
   const [circleSubTab, setCircleSubTab] = useState('missioni');
@@ -218,6 +182,7 @@ export default function App() {
   const [joinPreview, setJoinPreview] = useState(null);
 
   const [user, setUser] = useState({
+    id: null,
     name: 'Tu',
     nickname: 'tu_92',
     email: 'tu@example.com',
@@ -262,6 +227,7 @@ export default function App() {
       }
       setUser((u) => ({
         ...u,
+        id: session.user.id,
         name: profile.display_name,
         nickname: profile.nickname || u.nickname,
         phone: profile.phone,
@@ -289,6 +255,70 @@ export default function App() {
     };
   }, []);
 
+  /* --- tiene "ME" allineato all'utente reale una volta loggato --- */
+  useEffect(() => {
+    if (user.id) {
+      ME.id = user.id;
+      ME.name = user.nickname || user.name;
+      ME.color = user.avatarColor;
+    }
+  }, [user.id, user.nickname, user.name, user.avatarColor]);
+
+  /* --- carica le Cerchie reali dell'utente da Supabase --- */
+  async function loadCircles() {
+    const { data, error } = await supabase
+      .from('circles')
+      .select('*, circle_members(user_id, profiles(display_name, nickname, avatar_color))')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Impossibile caricare le Cerchie:', error.message);
+      return;
+    }
+
+    const mapped = (data || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      formatId: row.format_id,
+      status: row.status,
+      code: row.join_code,
+      ownerId: row.owner_id,
+      members: (row.circle_members || []).map((cm) => ({
+        id: cm.user_id,
+        name: cm.profiles?.nickname || cm.profiles?.display_name || 'Amico',
+        color: cm.profiles?.avatar_color || '#2F6FED',
+      })),
+      // Missioni e punteggi: ancora locali per questa fase, arrivano nella
+      // fase 3. Ogni Cerchia reale parte quindi "vuota" su questo fronte.
+      customMissions: [],
+      disabledMissionIds: [],
+      scoreEntries: [],
+    }));
+
+    setCircles(mapped);
+    setCirclesLoaded(true);
+    return mapped;
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadCircles();
+
+    // Si riaggiorna in automatico quando qualcuno entra/esce da una Cerchia
+    // (es. un amico usa il tuo codice invito mentre hai l'app aperta).
+    const channel = supabase
+      .channel('circle_members_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'circle_members' }, () => {
+        loadCircles();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   /* --- toast auto-dismiss --- */
   useEffect(() => {
     if (!toast) return;
@@ -303,19 +333,6 @@ export default function App() {
     const iv = setInterval(() => forceTick((t) => t + 1), 1000);
     return () => clearInterval(iv);
   }, [cooldowns]);
-
-  /* --- simula amici che entrano nella cerchia durante l'invito --- */
-  useEffect(() => {
-    if (plusStep !== 'invite' || !draftCircle) return;
-    const t1 = setTimeout(() => {
-      setDraftCircle((dc) => (dc ? { ...dc, members: [...dc.members, { id: newId('m'), name: 'Alessandro', color: '#8B5CF6' }] } : dc));
-    }, 2200);
-    const t2 = setTimeout(() => {
-      setDraftCircle((dc) => (dc ? { ...dc, members: [...dc.members, { id: newId('m'), name: 'Chiara', color: '#EC4899' }] } : dc));
-    }, 4200);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plusStep, draftCircle?.id]);
 
   function showToast(msg) {
     setToast({ msg, id: Date.now() });
@@ -361,53 +378,75 @@ export default function App() {
     }
   }
 
-  function handleConfirmFormat() {
+  async function handleConfirmFormat() {
     if (!newCircleFormatId) return;
+    const { data, error } = await supabase.rpc('create_circle', {
+      p_name: newCircleName.trim(),
+      p_format_id: newCircleFormatId,
+    });
+    if (error) {
+      showToast(`Non Ã¨ stato possibile creare la Cerchia: ${error.message}`);
+      return;
+    }
     setDraftCircle({
-      id: newId('c'),
-      name: newCircleName.trim(),
-      formatId: newCircleFormatId,
-      code: generateCode(),
-      ownerId: ME.id,
-      members: [ME],
+      id: data.id,
+      name: data.name,
+      formatId: data.format_id,
+      code: data.join_code,
+      ownerId: data.owner_id,
+      members: [{ ...ME }],
       customMissions: [],
       scoreEntries: [],
     });
     setPlusStep('invite');
   }
 
-  function handleStartSession() {
-    if (!draftCircle || draftCircle.members.length < 3) return;
-    const finalCircle = { ...draftCircle, status: 'active' };
-    setCircles((prev) => [...prev, finalCircle]);
+  async function handleStartSession() {
+    if (!draftCircle) return;
+    await loadCircles();
     resetPlusFlow();
     setActiveTab('gruppi');
-    openCircleDetail(finalCircle);
+    setOpenCircleId(draftCircle.id);
+    setCircleSubTab('missioni');
     showToast('Cerchia creata! Si parte ðŸŽ‰');
   }
 
-  function handleVerifyJoinCode() {
+  async function handleVerifyJoinCode() {
     const code = joinCodeInput.trim().toUpperCase();
     if (!code) return;
-    if (code === JOIN_CIRCLE_TEMPLATE.code && !circles.some((c) => c.code === code)) {
-      setJoinPreview(JOIN_CIRCLE_TEMPLATE);
-      setJoinError('');
-    } else if (circles.some((c) => c.code === code)) {
+    if (circles.some((c) => c.code === code)) {
       setJoinError('Fai giÃ  parte di questa Cerchia.');
       setJoinPreview(null);
-    } else {
+      return;
+    }
+    const { data, error } = await supabase.rpc('preview_circle_by_code', { p_code: code });
+    if (error || !data || data.length === 0) {
       setJoinError('Codice non valido o scaduto.');
       setJoinPreview(null);
+      return;
     }
+    const row = data[0];
+    setJoinPreview({
+      id: row.id,
+      name: row.name,
+      formatId: row.format_id,
+      memberCount: Number(row.member_count),
+    });
+    setJoinError('');
   }
 
-  function handleConfirmJoin() {
+  async function handleConfirmJoin() {
     if (!joinPreview) return;
-    const joined = { ...joinPreview, members: [...joinPreview.members, ME] };
-    setCircles((prev) => [...prev, joined]);
+    const code = joinCodeInput.trim().toUpperCase();
+    const { error } = await supabase.rpc('join_circle_by_code', { p_code: code });
+    if (error) {
+      setJoinError(`Non Ã¨ stato possibile unirsi: ${error.message}`);
+      return;
+    }
+    await loadCircles();
     resetPlusFlow();
     setActiveTab('gruppi');
-    showToast(`Ti sei unito a ${joined.name}!`);
+    showToast(`Ti sei unito a ${joinPreview.name}!`);
   }
 
   /* ---------------------------- missioni ---------------------------- */
@@ -548,17 +587,22 @@ export default function App() {
 
   function handleLeaveCircle(circle) {
     const ownerNote = circle.ownerId === ME.id
-      ? ' Sei il creatore: in una versione reale andrebbe prima nominato un nuovo owner.'
+      ? ' Sei il creatore: per ora la Cerchia resta comunque attiva per gli altri membri.'
       : '';
     setConfirmModal({
       title: 'Uscire dalla Cerchia?',
       body: `Non farai piÃ¹ parte di "${circle.name}". Potrai rientrare solo con un nuovo invito.${ownerNote}`,
       confirmLabel: 'Esci dalla Cerchia',
       danger: true,
-      onConfirm: () => {
-        setCircles((prev) => prev.filter((c) => c.id !== circle.id));
-        setOpenCircleId((cur) => (cur === circle.id ? null : cur));
+      onConfirm: async () => {
+        const { error } = await supabase.rpc('leave_circle', { p_circle_id: circle.id });
         setConfirmModal(null);
+        if (error) {
+          showToast(`Non Ã¨ stato possibile uscire dalla Cerchia: ${error.message}`);
+          return;
+        }
+        await loadCircles();
+        setOpenCircleId((cur) => (cur === circle.id ? null : cur));
         showToast(`Hai lasciato ${circle.name}.`);
       },
     });
@@ -649,7 +693,7 @@ export default function App() {
           return;
         }
         if (data.session) {
-          setUser((u) => ({ ...u, phone, phoneVerified: false }));
+          setUser((u) => ({ ...u, id: data.user.id, phone, phoneVerified: false }));
           setIsAuthenticated(true);
           showToast('Account creato! Benvenuto su Cerchia ðŸŽ‰');
         } else {
@@ -666,7 +710,7 @@ export default function App() {
           setAuthError('Numero di telefono o password non corretti.');
           return;
         }
-        setUser((u) => ({ ...u, phone }));
+        setUser((u) => ({ ...u, id: data.user.id, phone }));
         setIsAuthenticated(true);
         showToast('Bentornato su Cerchia ðŸ‘‹');
       }
@@ -781,7 +825,7 @@ export default function App() {
           <>
             <div className="app-shell">
               {activeTab === 'gruppi' && !openCircle && (
-                <GruppiScreen circles={circles} onOpen={openCircleDetail} onLeave={handleLeaveCircle} />
+                <GruppiScreen circles={circles} circlesLoaded={circlesLoaded} onOpen={openCircleDetail} onLeave={handleLeaveCircle} />
               )}
               {activeTab === 'plus' && !openCircle && (
                 <PlusScreen
@@ -792,7 +836,7 @@ export default function App() {
                   formatId={newCircleFormatId}
                   setFormatId={setNewCircleFormatId}
                   onConfirmFormat={handleConfirmFormat}
-                  draftCircle={draftCircle}
+                  draftCircle={draftCircle ? (circles.find((c) => c.id === draftCircle.id) || draftCircle) : null}
                   onStartSession={handleStartSession}
                   joinCodeInput={joinCodeInput}
                   setJoinCodeInput={setJoinCodeInput}
@@ -1018,7 +1062,7 @@ function AuthScreen(props) {
 /* SCHERMATA: GRUPPI                                                       */
 /* ---------------------------------------------------------------------- */
 
-function GruppiScreen({ circles, onOpen, onLeave }) {
+function GruppiScreen({ circles, circlesLoaded, onOpen, onLeave }) {
   return (
     <div className="screen">
       <div className="brand-row">
@@ -1032,7 +1076,9 @@ function GruppiScreen({ circles, onOpen, onLeave }) {
         </div>
       </div>
 
-      {circles.length === 0 ? (
+      {!circlesLoaded ? (
+        <p className="screen-sub">Caricamento delle tue Cerchieâ€¦</p>
+      ) : circles.length === 0 ? (
         <div className="empty-state">
           <svg width="88" height="88" viewBox="0 0 88 88" fill="none">
             <circle cx="44" cy="44" r="38" stroke="#C9C4B6" strokeWidth="3" strokeDasharray="8 8" />
@@ -1172,8 +1218,8 @@ function PlusScreen(props) {
 
       {step === 'invite' && draftCircle && (
         <>
-          <h1 className="screen-title">Manda il link al gruppo</h1>
-          <p className="screen-sub">Si parte quando siete almeno in 3.</p>
+          <h1 className="screen-title">Manda il codice al gruppo</h1>
+          <p className="screen-sub">La Cerchia Ã¨ giÃ  attiva: condividi il codice, chi lo usa compare qui in tempo reale.</p>
           <div className="invite-code-box">
             <div className="invite-code">{draftCircle.code}</div>
             <button
@@ -1193,15 +1239,9 @@ function PlusScreen(props) {
                 <Check size={16} color="#1FAE7A" style={{ marginLeft: 'auto' }} />
               </div>
             ))}
-            {draftCircle.members.length < 3 && (
-              <div className="member-join-row member-join-waiting">
-                <div className="avatar-circle avatar-placeholder">â€¦</div>
-                <span>In attesa di altri amici</span>
-              </div>
-            )}
           </div>
-          <button className="btn btn-primary btn-block" disabled={draftCircle.members.length < 3} onClick={onStartSession}>
-            {draftCircle.members.length < 3 ? `Avvia sessione (servono almeno 3 membri)` : 'Avvia sessione'}
+          <button className="btn btn-primary btn-block" onClick={onStartSession}>
+            Vai alla Cerchia
           </button>
         </>
       )}
@@ -1226,7 +1266,7 @@ function PlusScreen(props) {
             <div className="join-preview-card">
               <div className="join-preview-title">{joinPreview.name}</div>
               <div className="join-preview-sub">
-                {formatFor(joinPreview.formatId)?.emoji} {formatFor(joinPreview.formatId)?.name} Â· {joinPreview.members.length} membri
+                {formatFor(joinPreview.formatId)?.emoji} {formatFor(joinPreview.formatId)?.name} Â· {joinPreview.memberCount} membri
               </div>
               <button className="btn btn-primary btn-block" onClick={onConfirmJoin}>
                 Unisciti alla Cerchia
