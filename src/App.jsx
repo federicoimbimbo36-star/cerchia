@@ -184,14 +184,14 @@ export default function App() {
   const [user, setUser] = useState({
     id: null,
     name: 'Tu',
-    nickname: 'tu_92',
+    nickname: '',
     email: 'tu@example.com',
     emailVerified: true,
     phone: '+39 333 123 4567',
     phoneVerified: true,
     avatarColor: '#2F6FED',
   });
-  const [nicknameDraft, setNicknameDraft] = useState('tu_92');
+  const [nicknameDraft, setNicknameDraft] = useState('');
   const [pwFields, setPwFields] = useState({ current: '', next: '', confirm: '' });
 
   const [toast, setToast] = useState(null);
@@ -208,38 +208,39 @@ export default function App() {
 
   const openCircle = circles.find((c) => c.id === openCircleId) || null;
 
+  /* --- carica dati profilo reali (nome, nickname, colore...) da Supabase --- */
+  async function loadProfileInto(sessionUser) {
+    if (!sessionUser) return;
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', sessionUser.id)
+      .single();
+    if (error) {
+      console.warn('Impossibile leggere il profilo:', error.message);
+      return;
+    }
+    setUser((u) => ({
+      ...u,
+      id: sessionUser.id,
+      name: profile.display_name,
+      nickname: profile.nickname || '',
+      phone: profile.phone,
+      phoneVerified: false,
+      avatarColor: profile.avatar_color,
+    }));
+  }
+
   /* --- ripristina la sessione Supabase esistente (utente già loggato) --- */
   useEffect(() => {
     let active = true;
 
-    async function loadProfileInto(session) {
-      if (!session?.user) return;
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-      if (!active) return;
-      if (error) {
-        console.warn('Impossibile leggere il profilo:', error.message);
-        return;
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session?.user) {
+        await loadProfileInto(data.session.user);
+        if (active) setIsAuthenticated(true);
       }
-      setUser((u) => ({
-        ...u,
-        id: session.user.id,
-        name: profile.display_name,
-        nickname: profile.nickname || u.nickname,
-        phone: profile.phone,
-        phoneVerified: false,
-        avatarColor: profile.avatar_color,
-      }));
-      setIsAuthenticated(true);
-    }
-
-    supabase.auth.getSession().then(({ data }) => {
-      loadProfileInto(data.session).finally(() => {
-        if (active) setSessionChecked(true);
-      });
+      if (active) setSessionChecked(true);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -262,6 +263,11 @@ export default function App() {
       ME.color = user.avatarColor;
     }
   }, [user.id, user.nickname, user.name, user.avatarColor]);
+
+  /* --- allinea il campo di modifica nickname al valore reale caricato --- */
+  useEffect(() => {
+    setNicknameDraft(user.nickname || '');
+  }, [user.nickname]);
 
   /* --- carica le Cerchie reali dell'utente da Supabase --- */
   async function loadCircles() {
@@ -718,7 +724,7 @@ export default function App() {
           options: {
             data: {
               phone,
-              display_name: 'Tu',
+              display_name: `Amico ${phone.slice(-4)}`,
               avatar_color: PALETTE[0],
             },
           },
@@ -733,6 +739,7 @@ export default function App() {
         }
         if (data.session) {
           setUser((u) => ({ ...u, id: data.user.id, phone, phoneVerified: false }));
+          await loadProfileInto(data.user);
           setIsAuthenticated(true);
           showToast('Account creato! Benvenuto su Cerchia 🎉');
         } else {
@@ -750,6 +757,7 @@ export default function App() {
           return;
         }
         setUser((u) => ({ ...u, id: data.user.id, phone }));
+        await loadProfileInto(data.user);
         setIsAuthenticated(true);
         showToast('Bentornato su Cerchia 👋');
       }
@@ -764,14 +772,39 @@ export default function App() {
 
   /* ---------------------------- account ---------------------------- */
 
-  const nicknameTaken = RESERVED_NICKNAMES.includes(nicknameDraft.trim().toLowerCase());
-
-  function handleSaveAccount() {
-    if (nicknameTaken) {
-      showToast('Correggi il nickname prima di salvare: già in uso.');
+  async function handleSaveAccount() {
+    const name = user.name.trim();
+    const nickname = nicknameDraft.trim();
+    if (!name) {
+      showToast('Il nome non può essere vuoto.');
       return;
     }
-    setUser((u) => ({ ...u, nickname: nicknameDraft.trim() }));
+    if (nickname) {
+      const { data: existing, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('nickname', nickname)
+        .neq('id', user.id)
+        .maybeSingle();
+      if (checkError) {
+        showToast(`Errore nel controllo del nickname: ${checkError.message}`);
+        return;
+      }
+      if (existing) {
+        showToast('Nickname già in uso da un altro utente.');
+        return;
+      }
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ display_name: name, nickname: nickname || null, avatar_color: user.avatarColor })
+      .eq('id', user.id);
+    if (error) {
+      showToast(`Non è stato possibile salvare: ${error.message}`);
+      return;
+    }
+    setUser((u) => ({ ...u, nickname }));
+    await loadCircles();
     showToast('Modifiche salvate ✅');
   }
 
@@ -892,7 +925,6 @@ export default function App() {
                   setUser={setUser}
                   nicknameDraft={nicknameDraft}
                   setNicknameDraft={setNicknameDraft}
-                  nicknameTaken={nicknameTaken}
                   pwFields={pwFields}
                   setPwFields={setPwFields}
                   onSave={handleSaveAccount}
@@ -1323,7 +1355,7 @@ function PlusScreen(props) {
 /* ---------------------------------------------------------------------- */
 
 function AccountScreen({
-  user, setUser, nicknameDraft, setNicknameDraft, nicknameTaken,
+  user, setUser, nicknameDraft, setNicknameDraft,
   pwFields, setPwFields, onSave, onRecovery, onChangePassword, onDelete, onLogout,
 }) {
   return (
@@ -1353,7 +1385,7 @@ function AccountScreen({
       <div className="field-group">
         <label className="field-label">Nickname (univoco in tutta l'app)</label>
         <input className="text-input" value={nicknameDraft} onChange={(e) => setNicknameDraft(e.target.value)} />
-        {nicknameTaken && <p className="field-error">Nickname già in uso da un altro utente.</p>}
+        <p className="micro-hint">Puoi lasciarlo vuoto: in quel caso agli altri comparirà il tuo "Nome".</p>
       </div>
 
       <div className="field-group">
