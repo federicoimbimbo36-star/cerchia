@@ -1805,39 +1805,41 @@ const CSS = `
 
 * { box-sizing: border-box; }
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
 .page-bg {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   width: 100%;
-  background: radial-gradient(circle at 30% 0%, #E7EEFD 0%, var(--bg) 55%);
+  background: var(--bg);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 24px 12px;
   font-family: 'Inter', sans-serif;
   color: var(--ink);
+  overflow: hidden;
 }
 
 .phone-frame {
   width: 100%;
-  max-width: 412px;
-  min-height: 860px;
+  max-width: 480px;
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg);
-  border-radius: 34px;
-  box-shadow: 0 30px 60px -20px rgba(20,23,31,0.35), 0 0 0 10px #0e1015;
-  overflow: hidden;
   position: relative;
   display: flex;
   flex-direction: column;
-}
-
-@media (max-width: 460px) {
-  .page-bg { padding: 0; }
-  .phone-frame { border-radius: 0; box-shadow: none; min-height: 100vh; }
+  overflow: hidden;
 }
 
 .app-shell {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding-top: 18px;
   padding-bottom: 90px;
   position: relative;
