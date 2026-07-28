@@ -202,7 +202,6 @@ export default function App() {
   const [proposeText, setProposeText] = useState('');
   const [proposePoints, setProposePoints] = useState(null);
 
-  const [cooldowns, setCooldowns] = useState({});
   const [, forceTick] = useState(0);
   const idCounter = useRef(1000);
   const newId = (prefix) => `${prefix}-${(idCounter.current += 1)}`;
@@ -268,7 +267,12 @@ export default function App() {
   async function loadCircles() {
     const { data, error } = await supabase
       .from('circles')
-      .select('*, circle_members(user_id, profiles(display_name, nickname, avatar_color))')
+      .select(`*,
+        circle_members(user_id, profiles(display_name, nickname, avatar_color)),
+        custom_missions(id, title, points, created_by, removed, created_at),
+        disabled_missions(mission_id),
+        score_entries(id, mission_id, user_id, points, hidden, created_at, reactions(user_id, emoji))
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -288,11 +292,32 @@ export default function App() {
         name: cm.profiles?.nickname || cm.profiles?.display_name || 'Amico',
         color: cm.profiles?.avatar_color || '#2F6FED',
       })),
-      // Missioni e punteggi: ancora locali per questa fase, arrivano nella
-      // fase 3. Ogni Cerchia reale parte quindi "vuota" su questo fronte.
-      customMissions: [],
-      disabledMissionIds: [],
-      scoreEntries: [],
+      customMissions: (row.custom_missions || []).map((m) => ({
+        id: m.id,
+        title: m.title,
+        points: m.points,
+        repeatable: false,
+        requiresConsent: false,
+        custom: true,
+        removed: m.removed,
+        createdBy: m.created_by,
+      })),
+      disabledMissionIds: (row.disabled_missions || []).map((d) => d.mission_id),
+      scoreEntries: (row.score_entries || []).map((e) => {
+        const reactions = {};
+        (e.reactions || []).forEach((r) => {
+          reactions[r.emoji] = (reactions[r.emoji] || 0) + 1;
+        });
+        return {
+          id: e.id,
+          missionId: e.mission_id,
+          userId: e.user_id,
+          points: e.points,
+          hidden: e.hidden,
+          reactions,
+          ts: new Date(e.created_at).getTime(),
+        };
+      }),
     }));
 
     setCircles(mapped);
@@ -307,10 +332,11 @@ export default function App() {
     // Si riaggiorna in automatico quando qualcuno entra/esce da una Cerchia
     // (es. un amico usa il tuo codice invito mentre hai l'app aperta).
     const channel = supabase
-      .channel('circle_members_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'circle_members' }, () => {
-        loadCircles();
-      })
+      .channel('cerchia_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'circle_members' }, () => loadCircles())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'score_entries' }, () => loadCircles())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'custom_missions' }, () => loadCircles())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions' }, () => loadCircles())
       .subscribe();
 
     return () => {
@@ -326,13 +352,12 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  /* --- cooldown ticking --- */
+  /* --- cooldown ticking: aggiorna il conto alla rovescia visibile a schermo --- */
   useEffect(() => {
-    const hasActive = Object.values(cooldowns).some((end) => end > Date.now());
-    if (!hasActive) return;
+    if (!isAuthenticated) return;
     const iv = setInterval(() => forceTick((t) => t + 1), 1000);
     return () => clearInterval(iv);
-  }, [cooldowns]);
+  }, [isAuthenticated]);
 
   function showToast(msg) {
     setToast({ msg, id: Date.now() });
@@ -451,16 +476,27 @@ export default function App() {
 
   /* ---------------------------- missioni ---------------------------- */
 
-  function cooldownKey(circleId, missionId) {
-    return `${circleId}:${missionId}`;
+  function myLastCompletionTs(circleId, missionId) {
+    const circle = circles.find((c) => c.id === circleId);
+    if (!circle) return null;
+    const entries = circle.scoreEntries.filter((e) => e.missionId === missionId && e.userId === ME.id);
+    if (entries.length === 0) return null;
+    return Math.max(...entries.map((e) => e.ts));
   }
   function isOnCooldown(circleId, missionId) {
-    const end = cooldowns[cooldownKey(circleId, missionId)];
-    return end && end > Date.now();
+    const circle = circles.find((c) => c.id === circleId);
+    const mission = circle ? findMissionById(circle, missionId) : null;
+    const cooldownSec = mission?.cooldownSec || 20;
+    const last = myLastCompletionTs(circleId, missionId);
+    return last != null && last + cooldownSec * 1000 > Date.now();
   }
   function cooldownRemaining(circleId, missionId) {
-    const end = cooldowns[cooldownKey(circleId, missionId)] || 0;
-    return Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    const circle = circles.find((c) => c.id === circleId);
+    const mission = circle ? findMissionById(circle, missionId) : null;
+    const cooldownSec = mission?.cooldownSec || 20;
+    const last = myLastCompletionTs(circleId, missionId);
+    if (last == null) return 0;
+    return Math.max(0, Math.ceil((last + cooldownSec * 1000 - Date.now()) / 1000));
   }
   function alreadyDoneByMe(circle, mission) {
     return circle.scoreEntries.some((e) => e.missionId === mission.id && e.userId === ME.id);
@@ -494,23 +530,24 @@ export default function App() {
     }
   }
 
-  function finalizeCompletion(circleId, mission, silent, rejected) {
+  async function finalizeCompletion(circleId, mission, silent, rejected) {
     if (rejected) {
       showToast('Consenso non raggiunto: nessun punto assegnato.');
       setConsentModal(null);
       return;
     }
-    updateCircle(circleId, (c) => ({
-      ...c,
-      scoreEntries: [
-        ...c.scoreEntries,
-        { id: newId('e'), missionId: mission.id, userId: ME.id, points: mission.points, hidden: silent, reactions: {}, ts: Date.now() },
-      ],
-    }));
-    if (mission.repeatable) {
-      setCooldowns((prev) => ({ ...prev, [cooldownKey(circleId, mission.id)]: Date.now() + (mission.cooldownSec || 20) * 1000 }));
-    }
     setConsentModal(null);
+    const { error } = await supabase.rpc('complete_mission', {
+      p_circle_id: circleId,
+      p_mission_id: mission.id,
+      p_points: mission.points,
+      p_hidden: silent,
+    });
+    if (error) {
+      showToast(`Non è stato possibile salvare il punteggio: ${error.message}`);
+      return;
+    }
+    await loadCircles();
     showToast(`Completata! ${signed(mission.points)} punti`);
   }
 
@@ -525,40 +562,33 @@ export default function App() {
     requestComplete(circle, picked);
   }
 
-  function handleReact(circle, entryId, emoji) {
-    updateCircle(circle.id, (c) => ({
-      ...c,
-      scoreEntries: c.scoreEntries.map((e) =>
-        e.id === entryId ? { ...e, reactions: { ...e.reactions, [emoji]: (e.reactions[emoji] || 0) + 1 } } : e
-      ),
-    }));
+  async function handleReact(circle, entryId, emoji) {
+    const { error } = await supabase.rpc('toggle_reaction', { p_entry_id: entryId, p_emoji: emoji });
+    if (error) {
+      showToast(`Non è stato possibile aggiungere la reazione: ${error.message}`);
+      return;
+    }
+    await loadCircles();
   }
 
-  function handleProposeMission(circle) {
+  async function handleProposeMission(circle) {
     if (!proposeText.trim() || proposePoints === null) return;
-    const missionId = newId('custom');
+    const title = proposeText.trim();
     const points = proposePoints;
-    updateCircle(circle.id, (c) => ({
-      ...c,
-      customMissions: [
-        ...(c.customMissions || []),
-        { id: missionId, title: proposeText.trim(), points, repeatable: false, requiresConsent: false, custom: true, status: 'in_revisione' },
-      ],
-    }));
     setProposeText('');
     setProposePoints(null);
     setProposeOpen(false);
-    showToast(`Missione proposta (${signed(points)} punti): in revisione prima di essere attivabile.`);
-    // Il timer è legato all'id della missione, non alla schermata aperta:
-    // viene approvata anche se nel frattempo navighi altrove.
-    setTimeout(() => {
-      updateCircle(circle.id, (c) => ({
-        ...c,
-        customMissions: (c.customMissions || []).map((m) =>
-          m.id === missionId ? { ...m, status: 'approvata' } : m
-        ),
-      }));
-    }, 4000);
+    const { error } = await supabase.rpc('propose_mission', {
+      p_circle_id: circle.id,
+      p_title: title,
+      p_points: points,
+    });
+    if (error) {
+      showToast(`Non è stato possibile proporre la missione: ${error.message}`);
+      return;
+    }
+    await loadCircles();
+    showToast(`Missione proposta (${signed(points)} punti): già attiva per tutti!`);
   }
 
   function handleDeleteMission(circle, mission) {
@@ -567,19 +597,18 @@ export default function App() {
       body: `"${mission.title}" non sarà più disponibile per nessun membro della Cerchia.`,
       confirmLabel: 'Rimuovi missione',
       danger: true,
-      onConfirm: () => {
-        updateCircle(circle.id, (c) => {
-          if (mission.custom) {
-            return {
-              ...c,
-              customMissions: (c.customMissions || []).map((m) =>
-                m.id === mission.id ? { ...m, removed: true } : m
-              ),
-            };
-          }
-          return { ...c, disabledMissionIds: [...(c.disabledMissionIds || []), mission.id] };
-        });
+      onConfirm: async () => {
         setConfirmModal(null);
+        const { error } = await supabase.rpc('remove_mission', {
+          p_circle_id: circle.id,
+          p_mission_id: mission.id,
+          p_is_custom: !!mission.custom,
+        });
+        if (error) {
+          showToast(`Non è stato possibile rimuovere la missione: ${error.message}`);
+          return;
+        }
+        await loadCircles();
         showToast('Missione rimossa dalla Cerchia.');
       },
     });
@@ -618,9 +647,14 @@ export default function App() {
       title: 'Chiudere la sessione?',
       body: 'Verrà generato il recap finale. Non sarà più possibile completare nuove missioni.',
       confirmLabel: 'Chiudi e genera recap',
-      onConfirm: () => {
-        updateCircle(circle.id, (c) => ({ ...c, status: 'closed' }));
+      onConfirm: async () => {
         setConfirmModal(null);
+        const { error } = await supabase.rpc('close_session', { p_circle_id: circle.id });
+        if (error) {
+          showToast(`Non è stato possibile chiudere la sessione: ${error.message}`);
+          return;
+        }
+        await loadCircles();
         showToast('Sessione chiusa. Ecco il recap!');
       },
     });
@@ -631,9 +665,14 @@ export default function App() {
       title: 'Rimuovere il membro?',
       body: 'Verrà escluso dalla Cerchia. I punti già assegnati restano nello storico.',
       confirmLabel: 'Rimuovi',
-      onConfirm: () => {
-        updateCircle(circle.id, (c) => ({ ...c, members: c.members.filter((m) => m.id !== memberId) }));
+      onConfirm: async () => {
         setConfirmModal(null);
+        const { error } = await supabase.rpc('remove_member', { p_circle_id: circle.id, p_user_id: memberId });
+        if (error) {
+          showToast(`Non è stato possibile rimuovere il membro: ${error.message}`);
+          return;
+        }
+        await loadCircles();
         showToast('Membro rimosso.');
       },
     });
@@ -1767,6 +1806,7 @@ const CSS = `
 .app-shell {
   flex: 1;
   overflow-y: auto;
+  padding-top: 18px;
   padding-bottom: 90px;
   position: relative;
 }
